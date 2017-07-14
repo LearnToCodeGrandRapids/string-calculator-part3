@@ -120,10 +120,272 @@ namespace StringCalculator
 
             Assert.Equal(expected, actual);
         }
+
+        [Fact]
+        public void Add_ShouldLog3_WhenCalledWith1And2()
+        {
+            var logger = new LoggerMock();
+
+            var sc = new StringCalculator(logger);
+
+            const string expected = "3";
+
+            sc.Add("1,2");
+
+            var actual = logger.LastEntry;
+
+            Assert.Equal(expected, actual);
+        }
+
+        // When calling Add() and the logger throws an exception, the string calculator 
+        // should notify an IWebservice of some kind that logging has failed with the 
+        // message from the logger’s exception (you will need a mock and a stub).
+        [Fact]
+        public void Add_NotifiesWebServerOfLoggingExceptions_WhenLoggerThrows()
+        {
+            var logger = new LoggerMock();
+            var webService = new WebServiceMock();
+
+            var sc = new StringCalculator(logger, webService);
+
+            const string expectedExceptionMessage = "LoggerThrew";
+
+            sc.Add("616");
+
+            var actualExceptionMessage = webService.LastException.Message;
+
+            Assert.Equal(expectedExceptionMessage, actualExceptionMessage);
+        }
+
+        [Fact]
+        public void Add_Sends3ToConsole_WhenPassed1And2()
+        {
+            var logger = new LoggerMock();
+            var webService = new WebServiceMock();
+            var output = new OutputMock();
+            
+            var sc = new StringCalculator(logger, webService, output);
+
+            const string expected = "3";
+
+            sc.Add("1,2");
+
+            var actual = output.LastLine;
+
+            Assert.Equal(expected, actual);
+        }
+
+        /// <summary>
+        /// Create a program (test first)that uses string calculator, 
+        /// which the user can invoke through the terminal/console by 
+        /// calling “scalc ‘1,2,3’” and will output the following 
+        /// line before exiting: “The result is 6”
+        /// </summary>
+        [Fact]
+        public void Main_Writes6ToConsule_When123ProvidedByUser()
+        {
+            var output = new OutputMock();
+            
+            var sc = new StringCalculator(output);
+
+            const string expected = "The result is 6";
+
+            sc.Main(new [] { "scalc", "'1,2,3'" });
+
+            var actual = output.History[output.History.Count - 2];
+
+            Assert.Equal(expected, actual);
+        }
+        
+        [Fact]
+        public void Main_RequestsInput_UntilNoneIsProvided()
+        {
+            var output = new OutputMock();
+            var input = new InputMock();
+
+            var sc = new StringCalculator(output, input);
+
+            var expected = new[]
+            {
+                "6",
+                "The result is 6",
+                "another input please",
+                "3",
+                "The result is 3",
+                "another input please",
+                "5",
+                "The result is 5",
+                "another input please",
+            };
+
+            sc.Main(new[] { "scalc", "'1,2,3'" });
+
+            var actual = output.History;
+
+            Assert.Equal(expected[0], actual[0]);
+            Assert.Equal(expected[1], actual[1]);
+            Assert.Equal(expected[2], actual[2]);
+            Assert.Equal(expected[3], actual[3]);
+            Assert.Equal(expected[4], actual[4]);
+            Assert.Equal(expected[5], actual[5]);
+            Assert.Equal(expected[6], actual[6]);
+            Assert.Equal(expected[7], actual[7]);
+            Assert.Equal(expected[8], actual[8]);
+        }
+    }
+
+    public interface IInput
+    {
+        string ReadLine();
+    }
+
+    public class InputMock : IInput
+    {
+        private int Count { get; set; }
+
+        public InputMock()
+        {
+            Count = 0;
+        }
+
+        public string ReadLine()
+        {
+            Count++;
+
+            switch (Count)
+            {
+                case 1:
+                    return "'1,2'";
+                case 2:
+                    return "'1,2,2'";
+                default:
+                    return string.Empty;
+            }
+        }
+    }
+
+    public interface IOutput
+    {
+        void WriteLine(string value);
+    }
+
+    public class OutputMock : IOutput
+    {
+        public string LastLine { get; set; }
+        public List<string> History { get; set; }
+
+        public OutputMock()
+        {
+            History = new List<string>();
+        }
+
+        public void WriteLine(string value)
+        {
+            LastLine = value;
+            History.Add(value);
+        }
+    }
+
+    public interface IWebService
+    {
+        void TrackException(Exception ex);
+    }
+
+    public class WebServiceMock : IWebService
+    {
+        public Exception LastException { get; set; }
+
+        public void TrackException(Exception ex)
+        {
+            LastException = ex;
+        }
+    }
+
+    //  ILogger.Write()) 
+    public interface ILogger
+    {
+        void Write(string value);
+    }
+
+    public class LoggerMock : ILogger
+    {
+        public string LastEntry { get; set; } 
+
+        public void Write(string value)
+        {
+            if (value == "616")
+            {
+                throw new Exception("LoggerThrew");
+            }
+
+            LastEntry = value;
+        }
     }
 
     public class StringCalculator
     {
+        private ILogger Logger { get; }
+        private IWebService WebService { get; }
+        private IOutput Output { get; }
+        private IInput Input { get; }
+
+        public StringCalculator()
+        {
+        }
+
+        public StringCalculator(ILogger logger)
+        {
+            Logger = logger;
+        }
+
+        public StringCalculator(ILogger logger, IWebService webService)
+        {
+            Logger = logger;
+            WebService = webService;
+        }
+
+        public StringCalculator(ILogger logger, IWebService webService, IOutput output)
+        {
+            Logger = logger;
+            WebService = webService;
+            Output = output;
+        }
+
+        public StringCalculator(IOutput output)
+        {
+            Output = output;
+        }
+
+        public StringCalculator(IOutput output, IInput input)
+        {
+            Output = output;
+            Input = input;
+        }
+
+        public void Main(string[] args)
+        {
+            var verb = args[0];
+
+            if (verb == "scalc")
+            {
+                var input = args[1];
+
+                while (!string.IsNullOrWhiteSpace(input))
+                {
+                    input = input.Substring(1);
+                    input = input.Substring(0, input.Length - 1);
+
+                    var result = Add(input);
+
+                    Output.WriteLine($"The result is {result}");
+
+                    Output.WriteLine("another input please");
+
+                    input = (Input != null) ? Input.ReadLine() : string.Empty;
+                }
+            }
+        }
+
         public string ExtractDelimiters(string numbers, List<string> delimiters)
         {
             var openingPos = numbers.IndexOf("[", StringComparison.Ordinal);
@@ -208,6 +470,17 @@ namespace StringCalculator
                     runningTotal += number;
                 }
             }
+
+            try
+            {
+                Logger?.Write(runningTotal.ToString());
+            }
+            catch (Exception ex)
+            {
+                WebService?.TrackException(ex);
+            }
+
+            Output?.WriteLine(runningTotal.ToString());
 
             return runningTotal;
         }
